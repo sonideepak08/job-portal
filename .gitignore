@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+
+# Test coverage
+coverage/
+
+# Generated Prisma client
+src/generated/prisma/
+
+# Local AI/editor configuration
+.agents/
+.claude/
+.windsurf/
+skills-lock.json

@@ -1,0 +1,78 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+  importFileExtension = "ts"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  RECRUITER
+  CANDIDATE
+}
+
+model User {
+  id Int @id @default(autoincrement())
+  name String
+  email String @unique
+  password String
+  role Role
+  jobs Job[]
+  applications Application[]
+  refreshTokens RefreshToken[]
+}
+
+model Job {
+  id Int @id @default(autoincrement())
+  title String
+  description String
+  company String
+  location String
+  experience Int
+  skills String
+  recruiterId Int
+  recruiter User @relation(fields: [recruiterId], references: [id])
+  applications Application[]
+}
+
+enum ApplicationStatus {
+  APPLIED
+  SHORTLISTED
+  REJECTED
+  HIRED
+}
+
+model Application {
+  id Int @id @default(autoincrement())
+  candidateId Int
+  candidate User @relation(fields: [candidateId], references: [id])
+  jobId Int
+  job Job @relation(fields: [jobId], references: [id])
+  status ApplicationStatus
+  appliedAt DateTime
+}
+
+enum RevokedReason {
+  ROTATED
+  LOGOUT
+  REUSE_DETECTED
+}
+
+model RefreshToken {
+  id Int @id @default(autoincrement())
+  userId Int
+  tokenHash String @unique
+  expiresAt DateTime
+  createdAt DateTime
+  revokedAt DateTime?
+  user User @relation(fields: [userId], references: [id])
+  familyId String
+  revokedReason RevokedReason?
+}
