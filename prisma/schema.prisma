@@ -29,6 +29,11 @@ model User {
   refreshTokens RefreshToken[]
 }
 
+enum JobStatus {
+  ACTIVE
+  CLOSED
+}
+
 model Job {
   id Int @id @default(autoincrement())
   title String
@@ -37,6 +42,7 @@ model Job {
   location String
   experience Int
   skills String
+  status JobStatus @default(ACTIVE)
   recruiterId Int
   recruiter User @relation(fields: [recruiterId], references: [id])
   applications Application[]

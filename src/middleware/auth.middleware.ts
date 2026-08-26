@@ -76,7 +76,6 @@ export const authorizeJobOwnership = async (
   next: NextFunction,
 ) => {
   const jobId = Number(req.params.jobId);
-  console.log("jobId", jobId);
   if (!Number.isInteger(jobId) || jobId <= 0) {
     return res.status(400).json({
       message: "Invalid jobId",
