@@ -34,6 +34,28 @@ enum JobStatus {
   CLOSED
 }
 
+model Skill {
+  id Int @id @default(autoincrement())
+  name String
+  normalizedName String @unique
+  jobSkills JobSkill[]
+}
+
+model JobSkill {
+  jobId Int
+  job Job @relation(fields: [jobId], references: [id])
+  skillId Int
+  skill Skill @relation(fields: [skillId], references: [id])
+  @@id([jobId, skillId])
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+}
+
 model Job {
   id Int @id @default(autoincrement())
   title String
@@ -41,7 +63,8 @@ model Job {
   company String
   location String
   experience Int
-  skills String
+  jobSkills JobSkill[]
+  jobType JobType
   status JobStatus @default(ACTIVE)
   recruiterId Int
   recruiter User @relation(fields: [recruiterId], references: [id])
