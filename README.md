@@ -38,6 +38,11 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - Recruiters can close their own jobs
 - Recruiters can view their jobs
 - Candidates can view active jobs
+- Jobs support `FULL_TIME`, `PART_TIME`, `CONTRACT`, and `INTERNSHIP` types
+- Jobs support multiple normalized skills
+- Active job listings support pagination
+- Jobs can be filtered by location, experience, skills, and job type
+- Paginated responses include total records and total pages
 
 ## API Endpoints
 
@@ -59,6 +64,23 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 | POST   | `/jobs`              | Recruiter         | Create a job          |
 | PATCH  | `/jobs/:jobId`       | Recruiter / Owner | Update a job          |
 | PATCH  | `/jobs/:jobId/close` | Recruiter / Owner | Close a job           |
+
+### Job Listing Query Parameters
+
+`GET /jobs` supports:
+
+- `page`
+- `limit`
+- `location`
+- `experience`
+- `skills`
+- `jobType`
+
+Example:
+
+```http
+GET /jobs?page=1&limit=10&location=Pune&skills=Node.js,AWS&jobType=FULL_TIME
+```
 
 ## Setup
 
