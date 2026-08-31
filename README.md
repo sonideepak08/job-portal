@@ -42,7 +42,10 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - Jobs support multiple normalized skills
 - Active job listings support pagination
 - Jobs can be filtered by location, experience, skills, and job type
+- Active jobs can be searched by title, company, and skills
+- Job search is case-insensitive
 - Paginated responses include total records and total pages
+- Database indexes support common recruiter, job listing, and skill lookup queries
 
 ## API Endpoints
 
@@ -75,11 +78,24 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - `experience`
 - `skills`
 - `jobType`
+- `search`
 
-Example:
+Filter and paginate jobs:
 
 ```http
 GET /jobs?page=1&limit=10&location=Pune&skills=Node.js,AWS&jobType=FULL_TIME
+```
+
+Search jobs by title, company, or skills:
+
+```http
+GET /jobs?search=node
+```
+
+Search combined with filters:
+
+```http
+GET /jobs?search=node&location=Pune&jobType=FULL_TIME&page=1&limit=10
 ```
 
 ## Setup

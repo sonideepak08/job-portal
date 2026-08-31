@@ -49,4 +49,5 @@ export const jobQuerySchema = z.object({
       },
     ),
   jobType: z.enum(JobType).optional(),
+  search: z.string().trim().nonempty().optional(),
 });

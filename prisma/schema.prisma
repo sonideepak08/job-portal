@@ -47,6 +47,7 @@ model JobSkill {
   skillId Int
   skill Skill @relation(fields: [skillId], references: [id])
   @@id([jobId, skillId])
+  @@index([skillId])
 }
 
 enum JobType {
@@ -69,6 +70,8 @@ model Job {
   recruiterId Int
   recruiter User @relation(fields: [recruiterId], references: [id])
   applications Application[]
+  @@index([recruiterId, status])
+  @@index([status, id])
 }
 
 enum ApplicationStatus {

@@ -158,7 +158,8 @@ export const getActiveJobs = async (req: Request, res: Response) => {
     });
   }
 
-  const { page, limit, location, experience, skills, jobType } = result.data;
+  const { page, limit, location, experience, skills, jobType, search } =
+    result.data;
 
   const skip = (page - 1) * limit;
   const take = limit;
@@ -185,6 +186,35 @@ export const getActiveJobs = async (req: Request, res: Response) => {
         },
       },
     };
+  }
+
+  if (search) {
+    filters.OR = [
+      {
+        title: {
+          contains: search,
+          mode: "insensitive",
+        },
+      },
+      {
+        company: {
+          contains: search,
+          mode: "insensitive",
+        },
+      },
+      {
+        jobSkills: {
+          some: {
+            skill: {
+              name: {
+                contains: search,
+                mode: "insensitive",
+              },
+            },
+          },
+        },
+      },
+    ];
   }
 
   const jobRecords = await prisma.job.findMany({
