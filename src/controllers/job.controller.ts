@@ -8,6 +8,7 @@ import { z } from "zod";
 import { prisma } from "../config/prisma.ts";
 import { JobStatus } from "../generated/prisma/enums.ts";
 import type { JobWhereInput } from "../generated/prisma/models.ts";
+import { redisClient } from "../config/redis.ts";
 
 export const createJob = async (req: Request, res: Response) => {
   const result = createJobSchema.safeParse(req.body);
@@ -164,6 +165,25 @@ export const getActiveJobs = async (req: Request, res: Response) => {
   const skip = (page - 1) * limit;
   const take = limit;
 
+  const isHotQuery =
+    page === 1 &&
+    limit === 10 &&
+    location === undefined &&
+    experience === undefined &&
+    skills === undefined &&
+    jobType === undefined &&
+    search === undefined;
+
+  const cacheKey = "jobs:active:page:1:limit:10";
+  if (isHotQuery) {
+    const cached = await redisClient.get(cacheKey);
+    if (cached) {
+      console.log("cache HIT");
+      return res.status(200).json(JSON.parse(cached));
+    }
+    console.log("cache MISS");
+  }
+
   let skillsArray: string[] | undefined;
   if (skills) {
     skillsArray = skills.split(",").map((skill) => skill.trim().toLowerCase());
@@ -232,7 +252,7 @@ export const getActiveJobs = async (req: Request, res: Response) => {
 
   const totalPages = Math.ceil(totalJobs / limit);
 
-  return res.status(200).json({
+  const responseData = {
     success: true,
     data: jobRecords,
     pagination: {
@@ -241,7 +261,17 @@ export const getActiveJobs = async (req: Request, res: Response) => {
       totalRecords: totalJobs,
       totalPages,
     },
-  });
+  };
+  if (isHotQuery) {
+    await redisClient.set(cacheKey, JSON.stringify(responseData), {
+      expiration: {
+        type: "EX",
+        value: 60,
+      },
+    });
+  }
+
+  return res.status(200).json(responseData);
 };
 
 export const getMyJobs = async (req: Request, res: Response) => {

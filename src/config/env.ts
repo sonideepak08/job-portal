@@ -11,7 +11,8 @@ const envSchema = z.object({
   DB_PASSWORD: z.string().min(1),
   DB_NAME: z.string().min(1),
   DATABASE_URL: z.url(),
-  JWT_SECRET: z.string().min(1)
+  JWT_SECRET: z.string().min(1),
+  REDIS_URL: z.string().min(1),
 });
 
 export const envVariables = envSchema.parse(process.env);

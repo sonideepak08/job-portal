@@ -9,6 +9,7 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - TypeScript
 - PostgreSQL
 - Prisma ORM
+- Redis
 - Zod
 - bcrypt
 - JSON Web Token (JWT)
@@ -46,6 +47,12 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - Job search is case-insensitive
 - Paginated responses include total records and total pages
 - Database indexes support common recruiter, job listing, and skill lookup queries
+
+### Caching
+
+- Redis cache-aside caching for the default active job listing
+- Cache hit/miss logging
+- Cached job-list responses use TTL-based expiration
 
 ## API Endpoints
 
@@ -116,6 +123,18 @@ Generate Prisma Client:
 
 ```bash
 npx prisma generate
+```
+
+Start Redis with Docker for the first time:
+
+```bash
+docker run --name job-portal-redis -p 6379:6379 -d redis:7-alpine
+```
+
+For later runs, if the Redis container already exists but is stopped:
+
+```bash
+docker start job-portal-redis
 ```
 
 Start the development server:
