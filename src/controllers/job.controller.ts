@@ -79,6 +79,9 @@ export const createJob = async (req: Request, res: Response) => {
     };
   });
 
+  const cacheKey = "jobs:active:page:1:limit:10";
+  await redisClient.del(cacheKey);
+
   const responseSkills = skillRecords.map((skill) => {
     return {
       id: skill.id,
@@ -127,6 +130,9 @@ export const updateJob = async (req: Request, res: Response) => {
     data: result.data,
   });
 
+  const cacheKey = "jobs:active:page:1:limit:10";
+  await redisClient.del(cacheKey);
+
   return res.status(200).json({
     message: "job updated successfully",
   });
@@ -143,6 +149,9 @@ export const closeJob = async (req: Request, res: Response) => {
       status: JobStatus.CLOSED,
     },
   });
+
+  const cacheKey = "jobs:active:page:1:limit:10";
+  await redisClient.del(cacheKey);
 
   return res.status(200).json({
     message: "job closed successfully",
