@@ -53,6 +53,37 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - Redis cache-aside caching for the default active job listing
 - Cache hit/miss logging
 - Cached job-list responses use TTL-based expiration
+- Cached active-job listings are invalidated after job creation, update, or close
+
+### Cache-Aside Flow
+
+For the cached active-job listing:
+
+```text
+Request
+  ↓
+Check Redis
+  ↓
+Cache HIT
+  → Return cached response
+
+Cache MISS
+  → Query PostgreSQL
+  → Store response in Redis with TTL
+  → Return response
+```
+
+When a job is created, updated, or closed:
+
+```text
+Database mutation succeeds
+  ↓
+Invalidate active-job listing cache
+  ↓
+Next listing request becomes a cache MISS
+  ↓
+Fresh data is loaded from PostgreSQL and cached again
+```
 
 ## API Endpoints
 
