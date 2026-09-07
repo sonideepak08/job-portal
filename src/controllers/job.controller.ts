@@ -9,15 +9,13 @@ import { prisma } from "../config/prisma.ts";
 import { JobStatus } from "../generated/prisma/enums.ts";
 import type { JobWhereInput } from "../generated/prisma/models.ts";
 import { redisClient } from "../config/redis.ts";
+import { AppError } from "../utils/AppError.ts";
+import { sendSuccess } from "../utils/sendSuccess.ts";
 
 export const createJob = async (req: Request, res: Response) => {
   const result = createJobSchema.safeParse(req.body);
   if (!result.success) {
-    return res.status(400).json({
-      success: false,
-      message: "Validation failed",
-      errors: z.treeifyError(result.error),
-    });
+    throw new AppError("Validation failed", 400, z.treeifyError(result.error));
   }
 
   const { title, company, description, experience, location, skills, jobType } =
@@ -25,9 +23,7 @@ export const createJob = async (req: Request, res: Response) => {
 
   const user = req.user;
   if (!user) {
-    return res.status(401).json({
-      message: "Invalid user or not found",
-    });
+    throw new AppError("Invalid user or not found", 401);
   }
 
   const recruiterId = user.userId;
@@ -89,41 +85,28 @@ export const createJob = async (req: Request, res: Response) => {
     };
   });
 
-  return res.status(201).json({
-    success: true,
-    message: "job created successfully",
-    data: {
-      id: job.id,
-      company: job.company,
-      description: job.description,
-      experience: job.experience,
-      location: job.location,
-      skills: responseSkills,
-      title: job.title,
-      recruiterId: job.recruiterId,
-      jobType: job.jobType,
-    },
+  return sendSuccess(res, 201, "Job created successfully", {
+    id: job.id,
+    company: job.company,
+    description: job.description,
+    experience: job.experience,
+    location: job.location,
+    skills: responseSkills,
+    title: job.title,
+    recruiterId: job.recruiterId,
+    jobType: job.jobType,
   });
 };
 
 export const updateJob = async (req: Request, res: Response) => {
   const result = updateJobSchema.safeParse(req.body);
   if (!result.success) {
-    return res.status(400).json({
-      success: false,
-      message: "Validation failed",
-      errors: z.treeifyError(result.error),
-    });
+    throw new AppError("Validation failed", 400, z.treeifyError(result.error));
   }
 
   const jobId = Number(req.params.jobId);
-  if (!Number.isInteger(jobId) || jobId <= 0) {
-    return res.status(400).json({
-      message: "Invalid jobId",
-    });
-  }
 
-  await prisma.job.update({
+  const updatedJob = await prisma.job.update({
     where: {
       id: jobId,
     },
@@ -133,15 +116,13 @@ export const updateJob = async (req: Request, res: Response) => {
   const cacheKey = "jobs:active:page:1:limit:10";
   await redisClient.del(cacheKey);
 
-  return res.status(200).json({
-    message: "job updated successfully",
-  });
+  return sendSuccess(res, 200, "Job updated successfully", updatedJob);
 };
 
 export const closeJob = async (req: Request, res: Response) => {
   const jobId = Number(req.params.jobId);
 
-  await prisma.job.update({
+  const closedJob = await prisma.job.update({
     where: {
       id: jobId,
     },
@@ -153,19 +134,13 @@ export const closeJob = async (req: Request, res: Response) => {
   const cacheKey = "jobs:active:page:1:limit:10";
   await redisClient.del(cacheKey);
 
-  return res.status(200).json({
-    message: "job closed successfully",
-  });
+  return sendSuccess(res, 200, "Job closed successfully", closedJob);
 };
 
 export const getActiveJobs = async (req: Request, res: Response) => {
   const result = jobQuerySchema.safeParse(req.query);
   if (!result.success) {
-    return res.status(400).json({
-      success: false,
-      message: "Validation failed",
-      errors: z.treeifyError(result.error),
-    });
+    throw new AppError("Validation failed", 400, z.treeifyError(result.error));
   }
 
   const { page, limit, location, experience, skills, jobType, search } =
@@ -188,7 +163,14 @@ export const getActiveJobs = async (req: Request, res: Response) => {
     const cached = await redisClient.get(cacheKey);
     if (cached) {
       console.log("cache HIT");
-      return res.status(200).json(JSON.parse(cached));
+      const parsedCached = JSON.parse(cached);
+      return sendSuccess(
+        res,
+        200,
+        "Jobs fetched successfully",
+        parsedCached.data,
+        parsedCached.meta,
+      );
     }
     console.log("cache MISS");
   }
@@ -262,13 +244,14 @@ export const getActiveJobs = async (req: Request, res: Response) => {
   const totalPages = Math.ceil(totalJobs / limit);
 
   const responseData = {
-    success: true,
     data: jobRecords,
-    pagination: {
-      currentPage: page,
-      limit,
-      totalRecords: totalJobs,
-      totalPages,
+    meta: {
+      pagination: {
+        currentPage: page,
+        limit,
+        totalRecords: totalJobs,
+        totalPages,
+      },
     },
   };
   if (isHotQuery) {
@@ -280,15 +263,19 @@ export const getActiveJobs = async (req: Request, res: Response) => {
     });
   }
 
-  return res.status(200).json(responseData);
+  return sendSuccess(
+    res,
+    200,
+    "Jobs fetched successfully",
+    responseData.data,
+    responseData.meta,
+  );
 };
 
 export const getMyJobs = async (req: Request, res: Response) => {
   const user = req.user;
   if (!user) {
-    return res.status(401).json({
-      message: "Invalid user or not found",
-    });
+    throw new AppError("Invalid user or not found", 401);
   }
   const userId = user.userId;
 
@@ -298,8 +285,5 @@ export const getMyJobs = async (req: Request, res: Response) => {
     },
   });
 
-  return res.status(200).json({
-    success: true,
-    data: jobRecords,
-  });
+  return sendSuccess(res, 200, "Jobs fetched successfully", jobRecords);
 };

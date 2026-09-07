@@ -52,8 +52,20 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 
 - Redis cache-aside caching for the default active job listing
 - Cache hit/miss logging
-- Cached job-list responses use TTL-based expiration
+- Cached job-list data uses TTL-based expiration
 - Cached active-job listings are invalidated after job creation, update, or close
+- Cache hits and misses return the same standardized API response format
+
+### Error Handling & Responses
+
+- Centralized Express error-handling middleware
+- Custom `AppError` for application errors
+- Standardized success and error response formats
+- Zod validation errors include structured validation details
+- Handles validation, authentication, authorization, not-found, conflict, and unexpected errors
+- Prisma unique-constraint conflicts are mapped to HTTP `409`
+- Unknown routes return a standardized `404` response
+- Unexpected errors are logged with structured request information while internal details are hidden from clients
 
 ### Cache-Aside Flow
 
@@ -65,12 +77,13 @@ Request
 Check Redis
   ↓
 Cache HIT
-  → Return cached response
+  → Parse cached data and metadata
+  → Return standardized response
 
 Cache MISS
   → Query PostgreSQL
-  → Store response in Redis with TTL
-  → Return response
+  → Store data and metadata in Redis with TTL
+  → Return standardized response
 ```
 
 When a job is created, updated, or closed:

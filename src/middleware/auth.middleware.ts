@@ -3,24 +3,21 @@ import jsonwebtoken from "jsonwebtoken";
 import { envVariables } from "../config/env.ts";
 import { Role } from "../generated/prisma/enums.ts";
 import { prisma } from "../config/prisma.ts";
+import { AppError } from "../utils/AppError.ts";
 
 export const authenticate = (
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction,
 ) => {
   const authorization = req.headers.authorization;
   const isBearerToken = authorization?.startsWith("Bearer ");
   if (!isBearerToken) {
-    return res.status(401).json({
-      message: "Invalid access token",
-    });
+    throw new AppError("Authorization token missing or invalid", 401);
   }
   const accessToken = authorization?.split(" ")[1];
   if (!accessToken) {
-    return res.status(401).json({
-      message: "Authorization token missing or invalid",
-    });
+    throw new AppError("Authorization token missing or invalid", 401);
   }
   try {
     const decodedToken = jsonwebtoken.verify(
@@ -28,17 +25,13 @@ export const authenticate = (
       envVariables.JWT_SECRET,
     );
     if (typeof decodedToken === "string") {
-      return res.status(401).json({
-        message: "Invalid access token",
-      });
+      throw new AppError("Invalid or expired access token", 401);
     }
     if (
       typeof decodedToken.userId !== "number" ||
       !Object.values(Role).includes(decodedToken.role)
     ) {
-      return res.status(401).json({
-        message: "Invalid access token payload",
-      });
+      throw new AppError("Invalid access token payload", 401);
     }
     req.user = {
       userId: decodedToken.userId,
@@ -46,25 +39,22 @@ export const authenticate = (
     };
     next();
   } catch (error) {
-    return res.status(401).json({
-      message: "Invalid or expired access token",
-    });
+    if (error instanceof AppError) {
+      throw error;
+    }
+    throw new AppError("Invalid or expired access token", 401);
   }
 };
 
 export const authorizeRoles = (...allowedRoles: Role[]) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, _res: Response, next: NextFunction) => {
     const user = req.user;
     if (!user) {
-      return res.status(401).json({
-        message: "Invalid user or not found",
-      });
+      throw new AppError("Invalid user or not found", 401);
     }
     const isRoleAllowed = allowedRoles.includes(user.role);
     if (!isRoleAllowed) {
-      return res.status(403).json({
-        message: "You are not authorized to access this resource",
-      });
+      throw new AppError("You are not authorized to access this resource", 403);
     }
     next();
   };
@@ -72,21 +62,17 @@ export const authorizeRoles = (...allowedRoles: Role[]) => {
 
 export const authorizeJobOwnership = async (
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction,
 ) => {
   const jobId = Number(req.params.jobId);
   if (!Number.isInteger(jobId) || jobId <= 0) {
-    return res.status(400).json({
-      message: "Invalid jobId",
-    });
+    throw new AppError("Invalid jobId", 400);
   }
 
   const user = req.user;
   if (!user) {
-    return res.status(401).json({
-      message: "Invalid user or not found",
-    });
+    throw new AppError("Invalid user or not found", 401);
   }
 
   const jobDetails = await prisma.job.findUnique({
@@ -95,15 +81,11 @@ export const authorizeJobOwnership = async (
     },
   });
   if (!jobDetails) {
-    return res.status(404).json({
-      message: "Invalid job or not found",
-    });
+    throw new AppError("Job not found", 404);
   }
 
   if (jobDetails.recruiterId !== user.userId) {
-    return res.status(403).json({
-      message: "You are not authorized to modify this job",
-    });
+    throw new AppError("You are not authorized to modify this job", 403);
   }
   next();
 };
