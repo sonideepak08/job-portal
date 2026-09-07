@@ -12,6 +12,8 @@ import jsonwebtoken from "jsonwebtoken";
 import { envVariables } from "../config/env.ts";
 import crypto from "crypto";
 import { RevokedReason } from "../generated/prisma/enums.ts";
+import { AppError } from "../utils/AppError.ts";
+import { sendSuccess } from "../utils/sendSuccess.ts";
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const REFRESH_TOKEN_EXPIRY_DAYS = 7;
@@ -20,11 +22,7 @@ export const register = async (req: Request, res: Response) => {
   const result = registerSchema.safeParse(req.body);
 
   if (!result.success) {
-    return res.status(400).json({
-      success: false,
-      message: "Validation failed",
-      errors: z.treeifyError(result.error),
-    });
+    throw new AppError("Validation failed", 400, z.treeifyError(result.error));
   }
 
   const data = result.data;
@@ -40,15 +38,11 @@ export const register = async (req: Request, res: Response) => {
     },
   });
 
-  return res.status(201).json({
-    success: true,
-    message: "User registered successfully",
-    data: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    },
+  return sendSuccess(res, 201, "User registered successfully", {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
   });
 };
 
@@ -56,11 +50,7 @@ export const login = async (req: Request, res: Response) => {
   const result = loginSchema.safeParse(req.body);
 
   if (!result.success) {
-    return res.status(400).json({
-      success: false,
-      message: "Validation failed",
-      errors: z.treeifyError(result.error),
-    });
+    throw new AppError("Validation failed", 400, z.treeifyError(result.error));
   }
 
   const { email, password } = result.data;
@@ -71,17 +61,13 @@ export const login = async (req: Request, res: Response) => {
     },
   });
   if (!user) {
-    return res.status(401).json({
-      message: "Invalid email or password",
-    });
+    throw new AppError("Invalid email or password", 401);
   }
 
   const isValidPassword = await bcrypt.compare(password, user.password);
 
   if (!isValidPassword) {
-    return res.status(401).json({
-      message: "Invalid email or password",
-    });
+    throw new AppError("Invalid email or password", 401);
   }
 
   const payload = {
@@ -111,8 +97,7 @@ export const login = async (req: Request, res: Response) => {
     },
   });
 
-  return res.status(200).json({
-    message: "Login successful",
+  return sendSuccess(res, 200, "Login successful", {
     accessToken,
     refreshToken,
   });
@@ -122,11 +107,7 @@ export const refreshToken = async (req: Request, res: Response) => {
   const result = refreshTokenSchema.safeParse(req.body);
 
   if (!result.success) {
-    return res.status(400).json({
-      success: false,
-      message: "Validation failed",
-      errors: z.treeifyError(result.error),
-    });
+    throw new AppError("Validation failed", 400, z.treeifyError(result.error));
   }
 
   const { refreshToken } = result.data;
@@ -141,9 +122,7 @@ export const refreshToken = async (req: Request, res: Response) => {
   });
 
   if (!refreshTokenRecord) {
-    return res.status(401).json({
-      message: "Refresh token not valid",
-    });
+    throw new AppError("Refresh token not valid", 401);
   }
 
   const isRefreshTokenRevoked = !!refreshTokenRecord.revokedAt;
@@ -161,18 +140,14 @@ export const refreshToken = async (req: Request, res: Response) => {
         },
       });
     }
-    return res.status(401).json({
-      message: "Refresh token is revoked",
-    });
+    throw new AppError("Refresh token is revoked", 401);
   }
 
   const isRefreshTokenExpired =
     refreshTokenRecord.expiresAt.getTime() < Date.now();
 
   if (isRefreshTokenExpired) {
-    return res.status(401).json({
-      message: "Refresh token is expired",
-    });
+    throw new AppError("Refresh token is expired", 401);
   }
 
   const userId = refreshTokenRecord.userId;
@@ -184,9 +159,7 @@ export const refreshToken = async (req: Request, res: Response) => {
   });
 
   if (!user) {
-    return res.status(400).json({
-      message: "User not found",
-    });
+    throw new AppError("Invalid refresh token", 401);
   }
 
   const newRefreshToken = crypto.randomBytes(32).toString("hex");
@@ -230,8 +203,7 @@ export const refreshToken = async (req: Request, res: Response) => {
     expiresIn: "15m",
   });
 
-  return res.status(200).json({
-    message: "Refresh token generated",
+  return sendSuccess(res, 200, "Refresh token generated", {
     accessToken: newAccessToken,
     refreshToken: newRefreshToken,
   });
@@ -241,11 +213,7 @@ export const logout = async (req: Request, res: Response) => {
   const result = logoutSchema.safeParse(req.body);
 
   if (!result.success) {
-    return res.status(400).json({
-      success: false,
-      message: "Validation failed",
-      errors: z.treeifyError(result.error),
-    });
+    throw new AppError("Validation failed", 400, z.treeifyError(result.error));
   }
 
   const { refreshToken } = result.data;
@@ -261,10 +229,13 @@ export const logout = async (req: Request, res: Response) => {
   });
 
   if (!refreshTokenRecord) {
-    return res.status(401).json({
-      message: "Refresh token not valid",
-    });
+    throw new AppError("Refresh token not valid", 401);
   }
+
+  if (refreshTokenRecord.revokedAt) {
+    return sendSuccess(res, 200, "User logged out successfully", null);
+  }
+
   // update() doesn't return null when the record isn't found; it throws an error
   await prisma.refreshToken.update({
     where: {
@@ -276,7 +247,5 @@ export const logout = async (req: Request, res: Response) => {
     },
   });
 
-  return res.status(200).json({
-    message: "User logged out successfully",
-  });
+  return sendSuccess(res, 200, "User logged out successfully", null);
 };
