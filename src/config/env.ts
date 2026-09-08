@@ -13,6 +13,8 @@ const envSchema = z.object({
   DATABASE_URL: z.url(),
   JWT_SECRET: z.string().min(1),
   REDIS_URL: z.string().min(1),
+  AWS_REGION: z.string().nonempty(),
+  S3_RESUME_BUCKET: z.string().nonempty(),
 });
 
 export const envVariables = envSchema.parse(process.env);
