@@ -53,7 +53,8 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - Candidates can apply to active jobs
 - Applications link candidates with jobs
 - New applications start with `APPLIED` status
-- Duplicate applications to the same job are prevented
+- Duplicate applications are prevented with a database-level unique constraint on candidate and job
+- Duplicate application attempts return HTTP `409 Conflict` with a clear response
 - Applications record when the candidate applied
 - Closed jobs cannot receive new applications
 
