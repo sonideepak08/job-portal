@@ -1,6 +1,6 @@
 # Job Portal Backend API
 
-Backend API for a Job Portal application built with Node.js, Express, TypeScript, PostgreSQL, and Prisma.
+Backend API for a Job Portal application built with Node.js, Express, TypeScript, PostgreSQL, Prisma, Redis, and AWS S3.
 
 ## Tech Stack
 
@@ -10,6 +10,7 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - PostgreSQL
 - Prisma ORM
 - Redis
+- AWS S3
 - Zod
 - bcrypt
 - JSON Web Token (JWT)
@@ -57,6 +58,17 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - Duplicate application attempts return HTTP `409 Conflict` with a clear response
 - Applications record when the candidate applied
 - Closed jobs cannot receive new applications
+
+### Resume Uploads
+
+- Candidates can request a temporary pre-signed S3 upload URL
+- Resume files are uploaded directly from the client to Amazon S3
+- Resume file bytes do not pass through the Express API server
+- Only PDF resume metadata is accepted by the upload-URL endpoint
+- Resume objects use server-generated keys such as `resumes/<candidateId>/<UUID>.pdf`
+- Pre-signed upload URLs expire after 5 minutes
+- The S3 bucket remains private
+- AWS access follows least privilege with `s3:PutObject` restricted to the `resumes/*` prefix
 
 ### Caching
 
@@ -108,6 +120,26 @@ Next listing request becomes a cache MISS
 Fresh data is loaded from PostgreSQL and cached again
 ```
 
+### Resume Upload Flow
+
+```text
+Client
+  ↓
+POST /uploads/resume-url
+  ↓
+API authenticates and authorizes candidate
+  ↓
+API validates resume metadata
+  ↓
+API generates a temporary pre-signed S3 PUT URL
+  ↓
+Client receives upload URL
+  ↓
+Client uploads PDF directly to S3
+```
+
+The API server generates temporary upload permission but does not receive or forward the actual PDF file.
+
 ## API Endpoints
 
 ### Authentication
@@ -134,6 +166,40 @@ Fresh data is loaded from PostgreSQL and cached again
 | Method | Endpoint               | Access    | Description    |
 | ------ | ---------------------- | --------- | -------------- |
 | POST   | `/applications/:jobId` | Candidate | Apply to a job |
+
+### Uploads
+
+| Method | Endpoint              | Access    | Description                                |
+| ------ | --------------------- | --------- | ------------------------------------------ |
+| POST   | `/uploads/resume-url` | Candidate | Generate a pre-signed S3 resume upload URL |
+
+Resume upload URL request:
+
+```json
+{
+  "fileName": "resume.pdf",
+  "contentType": "application/pdf"
+}
+```
+
+Example response:
+
+```json
+{
+  "success": true,
+  "message": "Upload URL generated successfully",
+  "data": {
+    "uploadUrl": "<temporary-pre-signed-url>",
+    "key": "resumes/6/<uuid>.pdf"
+  }
+}
+```
+
+The returned `uploadUrl` is then used by the client to send a direct `PUT` request to S3 with:
+
+```http
+Content-Type: application/pdf
+```
 
 ### Job Listing Query Parameters
 
