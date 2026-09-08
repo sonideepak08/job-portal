@@ -48,6 +48,15 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - Paginated responses include total records and total pages
 - Database indexes support common recruiter, job listing, and skill lookup queries
 
+### Applications
+
+- Candidates can apply to active jobs
+- Applications link candidates with jobs
+- New applications start with `APPLIED` status
+- Duplicate applications to the same job are prevented
+- Applications record when the candidate applied
+- Closed jobs cannot receive new applications
+
 ### Caching
 
 - Redis cache-aside caching for the default active job listing
@@ -118,6 +127,12 @@ Fresh data is loaded from PostgreSQL and cached again
 | POST   | `/jobs`              | Recruiter         | Create a job          |
 | PATCH  | `/jobs/:jobId`       | Recruiter / Owner | Update a job          |
 | PATCH  | `/jobs/:jobId/close` | Recruiter / Owner | Close a job           |
+
+### Applications
+
+| Method | Endpoint               | Access    | Description    |
+| ------ | ---------------------- | --------- | -------------- |
+| POST   | `/applications/:jobId` | Candidate | Apply to a job |
 
 ### Job Listing Query Parameters
 

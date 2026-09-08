@@ -5,6 +5,7 @@ import {
   globalErrorHandler,
   routeErrorHandler,
 } from "./middleware/errorHandler.ts";
+import applicationRouter from "./routes/application.routes.ts";
 
 const app = express();
 
@@ -16,6 +17,7 @@ app.get("/health", (_req, res) => {
 
 app.use("/auth", authRouter);
 app.use("/jobs", jobRouter);
+app.use("/applications", applicationRouter);
 app.use(routeErrorHandler);
 app.use(globalErrorHandler);
 

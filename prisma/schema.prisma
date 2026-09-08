@@ -87,8 +87,10 @@ model Application {
   candidate User @relation(fields: [candidateId], references: [id])
   jobId Int
   job Job @relation(fields: [jobId], references: [id])
-  status ApplicationStatus
-  appliedAt DateTime
+  status ApplicationStatus @default(APPLIED)
+  appliedAt DateTime @default(now())
+  
+  @@unique([candidateId, jobId])
 }
 
 enum RevokedReason {
