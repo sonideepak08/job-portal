@@ -58,6 +58,9 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - Duplicate application attempts return HTTP `409 Conflict` with a clear response
 - Applications record when the candidate applied
 - Closed jobs cannot receive new applications
+- Resume metadata can be linked to an application
+- Each application can have at most one linked resume
+- Resume ownership is validated against the authenticated candidate
 
 ### Resume Uploads
 
@@ -69,6 +72,9 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - Pre-signed upload URLs expire after 5 minutes
 - The S3 bucket remains private
 - AWS access follows least privilege with `s3:PutObject` restricted to the `resumes/*` prefix
+- Resume metadata is stored separately in PostgreSQL after upload
+- Stored metadata includes S3 key, original file name, content type, file size, candidate, application, and timestamps
+- Resume file size is validated with a maximum size of 5 MB
 
 ### Caching
 
@@ -133,10 +139,22 @@ API validates resume metadata
   ↓
 API generates a temporary pre-signed S3 PUT URL
   ↓
-Client receives upload URL
+Client receives upload URL and S3 key
   ↓
 Client uploads PDF directly to S3
+  ↓
+S3 upload succeeds
+  ↓
+POST /applications/:applicationId/resume
+  ↓
+API validates candidate ownership and resume metadata
+  ↓
+Resume metadata is stored in PostgreSQL
+  ↓
+Resume is linked to the application
 ```
+
+The actual PDF file is stored in Amazon S3, while PostgreSQL stores the file metadata and S3 object reference.
 
 The API server generates temporary upload permission but does not receive or forward the actual PDF file.
 
@@ -163,9 +181,21 @@ The API server generates temporary upload permission but does not receive or for
 
 ### Applications
 
-| Method | Endpoint               | Access    | Description    |
-| ------ | ---------------------- | --------- | -------------- |
-| POST   | `/applications/:jobId` | Candidate | Apply to a job |
+| Method | Endpoint                              | Access    | Description                    |
+| ------ | ------------------------------------- | --------- | ------------------------------ |
+| POST   | `/applications/:jobId`                | Candidate | Apply to a job                 |
+| POST   | `/applications/:applicationId/resume` | Candidate | Store and link resume metadata |
+
+Resume metadata request:
+
+```json
+{
+  "resumeKey": "resumes/6/<uuid>.pdf",
+  "fileName": "resume.pdf",
+  "contentType": "application/pdf",
+  "fileSize": 847213
+}
+```
 
 ### Uploads
 
@@ -179,19 +209,6 @@ Resume upload URL request:
 {
   "fileName": "resume.pdf",
   "contentType": "application/pdf"
-}
-```
-
-Example response:
-
-```json
-{
-  "success": true,
-  "message": "Upload URL generated successfully",
-  "data": {
-    "uploadUrl": "<temporary-pre-signed-url>",
-    "key": "resumes/6/<uuid>.pdf"
-  }
 }
 ```
 

@@ -27,6 +27,7 @@ model User {
   jobs Job[]
   applications Application[]
   refreshTokens RefreshToken[]
+  resumes Resume[]
 }
 
 enum JobStatus {
@@ -89,6 +90,7 @@ model Application {
   job Job @relation(fields: [jobId], references: [id])
   status ApplicationStatus @default(APPLIED)
   appliedAt DateTime @default(now())
+  resume Resume?
   
   @@unique([candidateId, jobId])
 }
@@ -109,4 +111,18 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id])
   familyId String
   revokedReason RevokedReason?
+}
+
+model Resume {
+  id Int @id @default(autoincrement())
+  candidateId Int
+  applicationId Int @unique
+  resumeKey String
+  fileName String
+  fileSize Int
+  contentType String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  candidate User @relation(fields: [candidateId], references: [id])
+  application Application @relation(fields: [applicationId], references: [id])
 }
