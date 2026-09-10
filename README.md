@@ -61,6 +61,12 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - Resume metadata can be linked to an application
 - Each application can have at most one linked resume
 - Resume ownership is validated against the authenticated candidate
+- Recruiters can update the status of applications submitted to their own jobs
+- Candidates cannot update application status
+- Application status transitions follow controlled workflow rules
+- `REJECTED` and `HIRED` are terminal application states
+- Invalid status transitions return HTTP `409 Conflict`
+- Status updates use a conditional atomic update to prevent stale concurrent writes
 
 ### Resume Uploads
 
@@ -158,6 +164,50 @@ The actual PDF file is stored in Amazon S3, while PostgreSQL stores the file met
 
 The API server generates temporary upload permission but does not receive or forward the actual PDF file.
 
+### Application Status Flow
+
+Application status transitions follow these rules:
+
+```text
+APPLIED
+├── SHORTLISTED
+└── REJECTED
+
+SHORTLISTED
+├── HIRED
+└── REJECTED
+
+REJECTED
+└── Terminal state
+
+HIRED
+└── Terminal state
+```
+
+A recruiter can update an application only when the application belongs to a job owned by that recruiter.
+
+Status updates use a conditional database update:
+
+```text
+Read current application status
+  ↓
+Validate requested transition
+  ↓
+Update only when:
+applicationId matches
+AND
+current database status still matches the previously read status
+  ↓
+1 row updated
+→ success
+
+0 rows updated
+→ application state changed concurrently
+→ HTTP 409 Conflict
+```
+
+This prevents a stale concurrent request from silently overwriting a newer application status.
+
 ## API Endpoints
 
 ### Authentication
@@ -181,10 +231,11 @@ The API server generates temporary upload permission but does not receive or for
 
 ### Applications
 
-| Method | Endpoint                              | Access    | Description                    |
-| ------ | ------------------------------------- | --------- | ------------------------------ |
-| POST   | `/applications/:jobId`                | Candidate | Apply to a job                 |
-| POST   | `/applications/:applicationId/resume` | Candidate | Store and link resume metadata |
+| Method | Endpoint                              | Access            | Description                    |
+| ------ | ------------------------------------- | ----------------- | ------------------------------ |
+| POST   | `/applications/:jobId`                | Candidate         | Apply to a job                 |
+| POST   | `/applications/:applicationId/resume` | Candidate         | Store and link resume metadata |
+| PATCH  | `/applications/:applicationId/status` | Recruiter / Owner | Update application status      |
 
 Resume metadata request:
 
@@ -196,6 +247,25 @@ Resume metadata request:
   "fileSize": 847213
 }
 ```
+
+Application status update request:
+
+```json
+{
+  "status": "SHORTLISTED"
+}
+```
+
+Supported application statuses:
+
+```text
+APPLIED
+SHORTLISTED
+REJECTED
+HIRED
+```
+
+Not every status can transition directly to every other status. Invalid transitions return HTTP `409 Conflict`.
 
 ### Uploads
 

@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { authenticate, authorizeRoles } from "../middleware/auth.middleware.ts";
-import { applyToJob } from "../controllers/application.controller.ts";
+import {
+  applyToJob,
+  updateApplicationStatus,
+} from "../controllers/application.controller.ts";
 import { Role } from "../generated/prisma/enums.ts";
 import { saveResumeMetadata } from "../controllers/resume.controller.ts";
 
@@ -18,6 +21,13 @@ applicationRouter.post(
   authenticate,
   authorizeRoles(Role.CANDIDATE),
   saveResumeMetadata,
+);
+
+applicationRouter.patch(
+  "/:applicationId/status",
+  authenticate,
+  authorizeRoles(Role.RECRUITER),
+  updateApplicationStatus,
 );
 
 export default applicationRouter;
