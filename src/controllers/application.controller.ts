@@ -10,6 +10,7 @@ import {
   applicationStatusParamsSchema,
   updateApplicationStatusSchema,
 } from "../validators/applicationStatus.validator.ts";
+import { sendEmail } from "../services/email.service.ts";
 
 const allowedTransitions: Record<ApplicationStatus, ApplicationStatus[]> = {
   APPLIED: ["SHORTLISTED", "REJECTED"],
@@ -39,6 +40,18 @@ export const applyToJob = async (req: Request, res: Response) => {
   }
 
   const user = req.user!;
+  const candidate = await prisma.user.findUnique({
+    where: {
+      id: user.userId,
+    },
+    select: {
+      email: true,
+    },
+  });
+  if (!candidate) {
+    throw new AppError("User doesn't exist", 404);
+  }
+
   try {
     const appliedJob = await prisma.application.create({
       data: {
@@ -46,6 +59,16 @@ export const applyToJob = async (req: Request, res: Response) => {
         candidateId: user.userId,
       },
     });
+
+    try {
+      await sendEmail(
+        [candidate.email],
+        "Application submitted successfully",
+        `Your application for ${jobDetails.title} has been submitted successfully.`,
+      );
+    } catch (error) {
+      console.error("Failed to send application email", error);
+    }
 
     return sendSuccess(res, 201, "Job applied successfully", appliedJob);
   } catch (error) {
@@ -92,9 +115,15 @@ export const updateApplicationStatus = async (req: Request, res: Response) => {
     select: {
       id: true,
       status: true,
+      candidate: {
+        select: {
+          email: true,
+        },
+      },
       job: {
         select: {
           recruiterId: true,
+          title: true,
         },
       },
     },
@@ -134,6 +163,21 @@ export const updateApplicationStatus = async (req: Request, res: Response) => {
       id: applicationId,
     },
   });
+
+  try {
+    const body = `your application for ${application.job.title} is now ${status}.`;
+    const updatedBody =
+      status !== ApplicationStatus.REJECTED
+        ? `Congratulations, ${body}`
+        : `We regret to inform you that ${body}`;
+    await sendEmail(
+      [application.candidate.email],
+      "Application status updated",
+      updatedBody,
+    );
+  } catch (error) {
+    console.error("Failed to send application status email", error);
+  }
 
   return sendSuccess(
     res,
