@@ -1,6 +1,6 @@
 # Job Portal Backend API
 
-Backend API for a Job Portal application built with Node.js, Express, TypeScript, PostgreSQL, Prisma, Redis, and AWS S3.
+Backend API for a Job Portal application built with Node.js, Express, TypeScript, PostgreSQL, Prisma, Redis, AWS S3, and Amazon SES.
 
 ## Tech Stack
 
@@ -11,6 +11,7 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - Prisma ORM
 - Redis
 - AWS S3
+- Amazon SES
 - Zod
 - bcrypt
 - JSON Web Token (JWT)
@@ -81,6 +82,18 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - Resume metadata is stored separately in PostgreSQL after upload
 - Stored metadata includes S3 key, original file name, content type, file size, candidate, application, and timestamps
 - Resume file size is validated with a maximum size of 5 MB
+
+### Email Notifications
+
+- Amazon SES is used for application-related email notifications
+- Candidates receive a confirmation email after successfully applying to a job
+- Candidates receive an email when a recruiter updates their application status
+- Email sending is isolated in a reusable email service
+- The application uses a fixed verified SES sender while recipients are determined dynamically from candidate data
+- Email failure does not roll back or fail an already-successful application or status update
+- SES errors are logged separately from the main business operation
+- AWS access follows least privilege with only the required SES send permission
+- Local development uses a dedicated AWS profile instead of hardcoded AWS credentials
 
 ### Caching
 
@@ -207,6 +220,54 @@ current database status still matches the previously read status
 ```
 
 This prevents a stale concurrent request from silently overwriting a newer application status.
+
+### Email Notification Flow
+
+Application confirmation email:
+
+```text
+Candidate applies to a job
+  ↓
+Application is stored in PostgreSQL
+  ↓
+Candidate email and job title are available
+  ↓
+Email service calls Amazon SES
+  ↓
+Confirmation email is sent
+```
+
+Application status notification:
+
+```text
+Recruiter updates application status
+  ↓
+Authorization and transition rules are validated
+  ↓
+Conditional atomic database update succeeds
+  ↓
+Email service calls Amazon SES
+  ↓
+Candidate receives the updated status
+```
+
+Email is treated as a secondary side effect:
+
+```text
+Database operation succeeds
+  ↓
+Email send attempted
+  ↓
+Email succeeds
+→ normal API success
+
+Email fails
+→ error is logged
+→ database operation remains successful
+→ API still returns success
+```
+
+The database state is the source of truth. Email delivery does not determine whether the main business operation succeeded.
 
 ## API Endpoints
 
@@ -349,6 +410,20 @@ For later runs, if the Redis container already exists but is stopped:
 ```bash
 docker start job-portal-redis
 ```
+
+The development IAM identity uses least-privilege permissions for:
+
+```text
+S3
+→ s3:PutObject
+→ restricted to the resume upload prefix
+
+SES
+→ ses:SendEmail
+→ sender restricted using ses:FromAddress
+```
+
+When Amazon SES is in sandbox mode, test recipients must also be verified SES identities.
 
 Start the development server:
 

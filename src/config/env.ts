@@ -15,6 +15,7 @@ const envSchema = z.object({
   REDIS_URL: z.string().min(1),
   AWS_REGION: z.string().nonempty(),
   S3_RESUME_BUCKET: z.string().nonempty(),
+  SES_FROM_EMAIL: z.email(),
 });
 
 export const envVariables = envSchema.parse(process.env);
