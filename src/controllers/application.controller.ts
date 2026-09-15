@@ -11,6 +11,7 @@ import {
   updateApplicationStatusSchema,
 } from "../validators/applicationStatus.validator.ts";
 import { sendEmail } from "../services/email.service.ts";
+import { emailQueue } from "../queues/email.queue.ts";
 
 const allowedTransitions: Record<ApplicationStatus, ApplicationStatus[]> = {
   APPLIED: ["SHORTLISTED", "REJECTED"],
@@ -61,13 +62,13 @@ export const applyToJob = async (req: Request, res: Response) => {
     });
 
     try {
-      await sendEmail(
-        [candidate.email],
-        "Application submitted successfully",
-        `Your application for ${jobDetails.title} has been submitted successfully.`,
-      );
+      await emailQueue.add("send-email", {
+        to: [candidate.email],
+        subject: "Application submitted successfully",
+        body: `Your application for ${jobDetails.title} has been submitted successfully.`,
+      });
     } catch (error) {
-      console.error("Failed to send application email", error);
+      console.error("Failed to add email job to queue", error);
     }
 
     return sendSuccess(res, 201, "Job applied successfully", appliedJob);
@@ -170,13 +171,16 @@ export const updateApplicationStatus = async (req: Request, res: Response) => {
       status !== ApplicationStatus.REJECTED
         ? `Congratulations, ${body}`
         : `We regret to inform you that ${body}`;
-    await sendEmail(
-      [application.candidate.email],
-      "Application status updated",
-      updatedBody,
-    );
+
+    // Same job name as the application email because both are handled identically by the worker.
+    // They could use different job names if their processing logic diverges later.
+    await emailQueue.add("send-email", {
+      to: [application.candidate.email],
+      subject: "Application status updated",
+      body: updatedBody,
+    });
   } catch (error) {
-    console.error("Failed to send application status email", error);
+    console.error("Failed to add application status email job to queue", error);
   }
 
   return sendSuccess(

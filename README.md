@@ -1,6 +1,6 @@
 # Job Portal Backend API
 
-Backend API for a Job Portal application built with Node.js, Express, TypeScript, PostgreSQL, Prisma, Redis, AWS S3, and Amazon SES.
+Backend API for a Job Portal application built with Node.js, Express, TypeScript, PostgreSQL, Prisma, Redis, BullMQ, AWS S3, and Amazon SES.
 
 ## Tech Stack
 
@@ -10,6 +10,8 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - PostgreSQL
 - Prisma ORM
 - Redis
+- BullMQ
+- ioredis
 - AWS S3
 - Amazon SES
 - Zod
@@ -89,9 +91,15 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - Candidates receive a confirmation email after successfully applying to a job
 - Candidates receive an email when a recruiter updates their application status
 - Email sending is isolated in a reusable email service
+- Email work is processed asynchronously using BullMQ and Redis
+- API controllers enqueue email jobs instead of waiting for Amazon SES directly
+- A separate BullMQ worker consumes email jobs and calls the SES email service
+- Email jobs use automatic retries with exponential backoff
+- Successful jobs are removed from Redis after completion
+- Failed jobs remain available for inspection after retries are exhausted
+- If the worker is temporarily offline, queued jobs remain in Redis and are processed when the worker starts again
 - The application uses a fixed verified SES sender while recipients are determined dynamically from candidate data
 - Email failure does not roll back or fail an already-successful application or status update
-- SES errors are logged separately from the main business operation
 - AWS access follows least privilege with only the required SES send permission
 - Local development uses a dedicated AWS profile instead of hardcoded AWS credentials
 
@@ -221,53 +229,66 @@ current database status still matches the previously read status
 
 This prevents a stale concurrent request from silently overwriting a newer application status.
 
-### Email Notification Flow
+### Async Email Queue Flow
 
-Application confirmation email:
-
-```text
-Candidate applies to a job
-  ↓
-Application is stored in PostgreSQL
-  ↓
-Candidate email and job title are available
-  ↓
-Email service calls Amazon SES
-  ↓
-Confirmation email is sent
-```
-
-Application status notification:
+Application and status-update emails are produced by the API and processed by a separate worker:
 
 ```text
-Recruiter updates application status
+API / Producer
   ↓
-Authorization and transition rules are validated
+Business database operation succeeds
   ↓
-Conditional atomic database update succeeds
+emailQueue.add("send-email", ...)
   ↓
-Email service calls Amazon SES
+BullMQ stores the job in Redis
   ↓
-Candidate receives the updated status
+API returns success without waiting for SES
+
+Worker process
+  ↓
+Reads waiting job from the "email" queue
+  ↓
+Calls sendEmail(to, subject, body)
+  ↓
+Amazon SES sends the email
+  ↓
+Job completes
 ```
 
-Email is treated as a secondary side effect:
+The email queue uses these default job options:
 
 ```text
-Database operation succeeds
-  ↓
-Email send attempted
-  ↓
-Email succeeds
-→ normal API success
-
-Email fails
-→ error is logged
-→ database operation remains successful
-→ API still returns success
+attempts: 3
+backoff: exponential
+initial backoff delay: 2000 ms
+removeOnComplete: true
 ```
 
-The database state is the source of truth. Email delivery does not determine whether the main business operation succeeded.
+A retry reprocesses the same BullMQ job, so the job ID remains the same across attempts. A new `emailQueue.add(...)` call creates a new job ID.
+
+If the worker is offline when a job is added:
+
+```text
+API enqueues job
+  ↓
+Job remains waiting in Redis
+  ↓
+Worker starts later
+  ↓
+Worker immediately processes the waiting job
+```
+
+This decouples the HTTP request from the email-processing process.
+
+Redis is used for two different responsibilities in the project:
+
+```text
+Redis
+├── Cache-aside storage for active job listings
+└── BullMQ job storage and coordination
+```
+
+Retries improve reliability, but background work can execute more than once in some failure scenarios. Side effects such as email sending should therefore be designed with duplicate execution in mind where necessary.
 
 ## API Endpoints
 
@@ -399,6 +420,12 @@ Generate Prisma Client:
 npx prisma generate
 ```
 
+Configure the local Redis connection in `.env`:
+
+```env
+REDIS_URL=redis://localhost:6379
+```
+
 Start Redis with Docker for the first time:
 
 ```bash
@@ -430,3 +457,12 @@ Start the development server:
 ```bash
 npm run dev
 ```
+
+Run the BullMQ email worker in a separate terminal:
+
+```powershell
+$env:AWS_PROFILE="job-portal-dev"
+npx tsx src/workers/email.worker.ts
+```
+
+The API and worker run as separate processes. The API produces jobs, while the worker consumes them and sends emails through Amazon SES.
