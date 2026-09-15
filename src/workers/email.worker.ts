@@ -1,10 +1,7 @@
 import { Worker } from "bullmq";
 import type { EmailJobData } from "../queues/email.queue.ts";
 import { sendEmail } from "../services/email.service.ts";
-import { envVariables } from "../config/env.ts";
 import { bullWorkerConnection } from "../config/bullmq.ts";
-
-const redisUrl = new URL(envVariables.REDIS_URL);
 
 const emailWorker = new Worker<EmailJobData>(
   "email",
@@ -18,15 +15,30 @@ const emailWorker = new Worker<EmailJobData>(
       job.name,
     );
     await sendEmail(to, subject, body);
-    console.log(
-      "Worker completed processing",
-      "jobId:",
-      job.id,
-      "jobName:",
-      job.name,
-    );
   },
   {
     connection: bullWorkerConnection,
   },
 );
+
+emailWorker.on("completed", (job) => {
+  console.log(
+    `Job completed successfully. jobId: ${job.id}, jobName: ${job.name}`,
+  );
+});
+emailWorker.on("failed", (job, error) => {
+  if (!job) {
+    console.error("Unknown job failed:", error.message);
+    return;
+  }
+
+  const maxAttempts = job.opts.attempts ?? 1;
+
+  console.error(
+    `Job ${job.id} failed. Attempt ${job.attemptsMade}/${maxAttempts}. Error: ${error.message}`,
+  );
+
+  if (job.attemptsMade >= maxAttempts) {
+    console.error(`Job ${job.id} permanently failed after all attempts.`);
+  }
+});

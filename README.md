@@ -94,7 +94,7 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - Email work is processed asynchronously using BullMQ and Redis
 - API controllers enqueue email jobs instead of waiting for Amazon SES directly
 - A separate BullMQ worker consumes email jobs and calls the SES email service
-- Email jobs use automatic retries with exponential backoff
+- Email jobs use up to 3 total processing attempts with exponential backoff starting at 2000 ms
 - Successful jobs are removed from Redis after completion
 - Failed jobs remain available for inspection after retries are exhausted
 - If the worker is temporarily offline, queued jobs remain in Redis and are processed when the worker starts again
