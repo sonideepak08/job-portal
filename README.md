@@ -17,6 +17,7 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - Zod
 - bcrypt
 - JSON Web Token (JWT)
+- OpenAPI / Swagger UI
 
 ## Features
 
@@ -40,6 +41,7 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 
 - Recruiters can create jobs
 - Recruiters can update their own jobs
+- Job updates support replacing linked skills while preserving existing skills when no skills are supplied
 - Recruiters can close their own jobs
 - Recruiters can view their jobs
 - Candidates can view active jobs
@@ -57,6 +59,7 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - Candidates can apply to active jobs
 - Applications link candidates with jobs
 - New applications start with `APPLIED` status
+- Recruiter status-update requests accept `SHORTLISTED`, `REJECTED`, or `HIRED`; `APPLIED` remains the initial status and cannot be selected as a target in the current workflow
 - Duplicate applications are prevented with a database-level unique constraint on candidate and job
 - Duplicate application attempts return HTTP `409 Conflict` with a clear response
 - Applications record when the candidate applied
@@ -121,6 +124,13 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - Prisma unique-constraint conflicts are mapped to HTTP `409`
 - Unknown routes return a standardized `404` response
 - Unexpected errors are logged with structured request information while internal details are hidden from clients
+
+### API Documentation
+
+- OpenAPI 3.0 documentation is generated using swagger-jsdoc and served with Swagger UI
+- Authentication, jobs, applications, resume metadata, and resume upload URL endpoints are documented
+- Swagger UI provides request/response schemas, example inputs, documented error responses, and interactive API testing
+- Protected endpoints support JWT Bearer authorization through the Swagger UI Authorize button
 
 ### Cache-Aside Flow
 
@@ -291,6 +301,8 @@ Redis
 Retries improve reliability, but background work can execute more than once in some failure scenarios. Side effects such as email sending should therefore be designed with duplicate execution in mind where necessary.
 
 ## API Endpoints
+
+Interactive OpenAPI documentation is available at `http://localhost:3000/api-docs` while the development server is running. Use **Authorize** in Swagger UI and enter a valid JWT access token to try protected endpoints. Swagger describes the API contract; Express middleware and Zod enforce authorization and validation.
 
 ### Authentication
 

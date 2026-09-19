@@ -7,6 +7,8 @@ import {
 } from "./middleware/errorHandler.ts";
 import applicationRouter from "./routes/application.routes.ts";
 import uploadRouter from "./routes/upload.routes.ts";
+import swaggerUi from "swagger-ui-express";
+import { swaggerSpec } from "./config/swagger.ts";
 
 const app = express();
 
@@ -15,6 +17,8 @@ app.use(express.json());
 app.get("/health", (_req, res) => {
   res.send("server is up");
 });
+
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use("/auth", authRouter);
 app.use("/jobs", jobRouter);

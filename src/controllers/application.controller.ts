@@ -10,7 +10,6 @@ import {
   applicationStatusParamsSchema,
   updateApplicationStatusSchema,
 } from "../validators/applicationStatus.validator.ts";
-import { sendEmail } from "../services/email.service.ts";
 import { emailQueue } from "../queues/email.queue.ts";
 
 const allowedTransitions: Record<ApplicationStatus, ApplicationStatus[]> = {

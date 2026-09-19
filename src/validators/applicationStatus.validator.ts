@@ -5,5 +5,5 @@ export const applicationStatusParamsSchema = z.object({
 });
 
 export const updateApplicationStatusSchema = z.object({
-  status: z.enum(["APPLIED", "SHORTLISTED", "REJECTED", "HIRED"]),
+  status: z.enum(["SHORTLISTED", "REJECTED", "HIRED"]),
 });

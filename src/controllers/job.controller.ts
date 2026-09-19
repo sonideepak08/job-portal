@@ -104,13 +104,92 @@ export const updateJob = async (req: Request, res: Response) => {
     throw new AppError("Validation failed", 400, z.treeifyError(result.error));
   }
 
+  const { skills, ...jobData } = result.data;
+
   const jobId = Number(req.params.jobId);
 
-  const updatedJob = await prisma.job.update({
-    where: {
-      id: jobId,
-    },
-    data: result.data,
+  const updatedJob = await prisma.$transaction(async (tx) => {
+    const existingJob = await tx.job.findUnique({
+      where: {
+        id: jobId,
+      },
+    });
+    if (!existingJob) {
+      throw new AppError("Job doesn't exist", 404);
+    }
+
+    if (Object.keys(jobData).length > 0) {
+      await tx.job.update({
+        where: {
+          id: jobId,
+        },
+        data: jobData,
+      });
+    }
+
+    if (skills) {
+      const skillUpsertPromises = skills.map((skill) => {
+        const normalizedSkill = skill.toLowerCase();
+        return tx.skill.upsert({
+          where: {
+            normalizedName: normalizedSkill,
+          },
+          update: {},
+          create: {
+            name: skill,
+            normalizedName: normalizedSkill,
+          },
+        });
+      });
+
+      const skillRecords = await Promise.all(skillUpsertPromises);
+
+      await tx.jobSkill.deleteMany({
+        where: {
+          jobId,
+        },
+      });
+
+      const jobSkillData = skillRecords.map((skill) => {
+        return {
+          jobId,
+          skillId: skill.id,
+        };
+      });
+
+      await tx.jobSkill.createMany({
+        data: jobSkillData,
+      });
+    }
+
+    const jobWithSkills = await tx.job.findUnique({
+      where: {
+        id: jobId,
+      },
+      include: {
+        jobSkills: {
+          include: {
+            skill: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!jobWithSkills) {
+      throw new AppError("Job doesn't exist", 404);
+    }
+    const { jobSkills, ...jobFields } = jobWithSkills;
+    const responseSkills = jobSkills.map((jobSkill) => {
+      return jobSkill.skill;
+    });
+    return {
+      ...jobFields,
+      skills: responseSkills,
+    };
   });
 
   const cacheKey = "jobs:active:page:1:limit:10";
