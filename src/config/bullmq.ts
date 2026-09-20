@@ -1,8 +1,8 @@
 import { Redis } from "ioredis";
-import { envVariables } from "./env.ts";
+import { workerEnvVariables } from "./workerEnv.ts";
 
-export const bullQueueConnection = new Redis(envVariables.REDIS_URL);
+export const bullQueueConnection = new Redis(workerEnvVariables.REDIS_URL);
 
-export const bullWorkerConnection = new Redis(envVariables.REDIS_URL, {
+export const bullWorkerConnection = new Redis(workerEnvVariables.REDIS_URL, {
   maxRetriesPerRequest: null,
 });

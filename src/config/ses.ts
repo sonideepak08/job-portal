@@ -1,6 +1,6 @@
 import { SESv2Client } from "@aws-sdk/client-sesv2";
-import { envVariables } from "./env.ts";
+import { workerEnvVariables } from "./workerEnv.ts";
 
 export const sesClient = new SESv2Client({
-  region: envVariables.AWS_REGION,
+  region: workerEnvVariables.AWS_REGION,
 });

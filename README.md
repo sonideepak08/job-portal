@@ -10,10 +10,8 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 - PostgreSQL
 - Prisma ORM
 - Redis
-- BullMQ
-- ioredis
-- AWS S3
-- Amazon SES
+- BullMQ and ioredis
+- AWS S3 and Amazon SES
 - Zod
 - bcrypt
 - JSON Web Token (JWT)
@@ -21,288 +19,89 @@ Backend API for a Job Portal application built with Node.js, Express, TypeScript
 
 ## Features
 
-### Authentication
+### Authentication and Authorization
 
-- User registration
-- User login
-- JWT access tokens
-- Refresh-token rotation
-- Refresh-token reuse detection
-- Logout and token revocation
-
-### Authorization
-
-- JWT authentication middleware
-- Role-based access control
-- `RECRUITER` and `CANDIDATE` roles
+- User registration and login
+- JWT access tokens and refresh-token rotation
+- Refresh-token reuse detection, logout, and token revocation
+- Role-based access control for `RECRUITER` and `CANDIDATE`
 - Resource ownership authorization
 
 ### Job Management
 
-- Recruiters can create jobs
-- Recruiters can update their own jobs
-- Job updates support replacing linked skills while preserving existing skills when no skills are supplied
-- Recruiters can close their own jobs
-- Recruiters can view their jobs
+- Recruiters can create, update, close, and view their own jobs
 - Candidates can view active jobs
 - Jobs support `FULL_TIME`, `PART_TIME`, `CONTRACT`, and `INTERNSHIP` types
 - Jobs support multiple normalized skills
-- Active job listings support pagination
-- Jobs can be filtered by location, experience, skills, and job type
-- Active jobs can be searched by title, company, and skills
-- Job search is case-insensitive
-- Paginated responses include total records and total pages
-- Database indexes support common recruiter, job listing, and skill lookup queries
+- Active job listings support pagination, filtering, and case-insensitive search
+- Database indexes support common job listing and lookup queries
 
 ### Applications
 
 - Candidates can apply to active jobs
-- Applications link candidates with jobs
-- New applications start with `APPLIED` status
-- Recruiter status-update requests accept `SHORTLISTED`, `REJECTED`, or `HIRED`; `APPLIED` remains the initial status and cannot be selected as a target in the current workflow
-- Duplicate applications are prevented with a database-level unique constraint on candidate and job
-- Duplicate application attempts return HTTP `409 Conflict` with a clear response
-- Applications record when the candidate applied
+- Duplicate applications are prevented by a database-level unique constraint
 - Closed jobs cannot receive new applications
-- Resume metadata can be linked to an application
-- Each application can have at most one linked resume
-- Resume ownership is validated against the authenticated candidate
 - Recruiters can update the status of applications submitted to their own jobs
-- Candidates cannot update application status
 - Application status transitions follow controlled workflow rules
-- `REJECTED` and `HIRED` are terminal application states
-- Invalid status transitions return HTTP `409 Conflict`
-- Status updates use a conditional atomic update to prevent stale concurrent writes
+- Conditional atomic updates prevent stale concurrent status changes
+- Resume metadata can be linked to an application with candidate ownership validation
 
-### Resume Uploads
-
-- Candidates can request a temporary pre-signed S3 upload URL
-- Resume files are uploaded directly from the client to Amazon S3
-- Resume file bytes do not pass through the Express API server
-- Only PDF resume metadata is accepted by the upload-URL endpoint
-- Resume objects use server-generated keys such as `resumes/<candidateId>/<UUID>.pdf`
-- Pre-signed upload URLs expire after 5 minutes
-- The S3 bucket remains private
-- AWS access follows least privilege with `s3:PutObject` restricted to the `resumes/*` prefix
-- Resume metadata is stored separately in PostgreSQL after upload
-- Stored metadata includes S3 key, original file name, content type, file size, candidate, application, and timestamps
-- Resume file size is validated with a maximum size of 5 MB
-
-### Email Notifications
-
-- Amazon SES is used for application-related email notifications
-- Candidates receive a confirmation email after successfully applying to a job
-- Candidates receive an email when a recruiter updates their application status
-- Email sending is isolated in a reusable email service
-- Email work is processed asynchronously using BullMQ and Redis
-- API controllers enqueue email jobs instead of waiting for Amazon SES directly
-- A separate BullMQ worker consumes email jobs and calls the SES email service
-- Email jobs use up to 3 total processing attempts with exponential backoff starting at 2000 ms
-- Successful jobs are removed from Redis after completion
-- Failed jobs remain available for inspection after retries are exhausted
-- If the worker is temporarily offline, queued jobs remain in Redis and are processed when the worker starts again
-- The application uses a fixed verified SES sender while recipients are determined dynamically from candidate data
-- Email failure does not roll back or fail an already-successful application or status update
-- AWS access follows least privilege with only the required SES send permission
-- Local development uses a dedicated AWS profile instead of hardcoded AWS credentials
-
-### Caching
-
-- Redis cache-aside caching for the default active job listing
-- Cache hit/miss logging
-- Cached job-list data uses TTL-based expiration
-- Cached active-job listings are invalidated after job creation, update, or close
-- Cache hits and misses return the same standardized API response format
-
-### Error Handling & Responses
-
-- Centralized Express error-handling middleware
-- Custom `AppError` for application errors
-- Standardized success and error response formats
-- Zod validation errors include structured validation details
-- Handles validation, authentication, authorization, not-found, conflict, and unexpected errors
-- Prisma unique-constraint conflicts are mapped to HTTP `409`
-- Unknown routes return a standardized `404` response
-- Unexpected errors are logged with structured request information while internal details are hidden from clients
-
-### API Documentation
-
-- OpenAPI 3.0 documentation is generated using swagger-jsdoc and served with Swagger UI
-- Authentication, jobs, applications, resume metadata, and resume upload URL endpoints are documented
-- Swagger UI provides request/response schemas, example inputs, documented error responses, and interactive API testing
-- Protected endpoints support JWT Bearer authorization through the Swagger UI Authorize button
-
-### Cache-Aside Flow
-
-For the cached active-job listing:
-
-```text
-Request
-  ↓
-Check Redis
-  ↓
-Cache HIT
-  → Parse cached data and metadata
-  → Return standardized response
-
-Cache MISS
-  → Query PostgreSQL
-  → Store data and metadata in Redis with TTL
-  → Return standardized response
-```
-
-When a job is created, updated, or closed:
-
-```text
-Database mutation succeeds
-  ↓
-Invalidate active-job listing cache
-  ↓
-Next listing request becomes a cache MISS
-  ↓
-Fresh data is loaded from PostgreSQL and cached again
-```
-
-### Resume Upload Flow
-
-```text
-Client
-  ↓
-POST /uploads/resume-url
-  ↓
-API authenticates and authorizes candidate
-  ↓
-API validates resume metadata
-  ↓
-API generates a temporary pre-signed S3 PUT URL
-  ↓
-Client receives upload URL and S3 key
-  ↓
-Client uploads PDF directly to S3
-  ↓
-S3 upload succeeds
-  ↓
-POST /applications/:applicationId/resume
-  ↓
-API validates candidate ownership and resume metadata
-  ↓
-Resume metadata is stored in PostgreSQL
-  ↓
-Resume is linked to the application
-```
-
-The actual PDF file is stored in Amazon S3, while PostgreSQL stores the file metadata and S3 object reference.
-
-The API server generates temporary upload permission but does not receive or forward the actual PDF file.
-
-### Application Status Flow
-
-Application status transitions follow these rules:
+Application status transitions:
 
 ```text
 APPLIED
 ├── SHORTLISTED
+│   ├── HIRED
+│   └── REJECTED
 └── REJECTED
 
-SHORTLISTED
-├── HIRED
-└── REJECTED
-
-REJECTED
-└── Terminal state
-
-HIRED
-└── Terminal state
+HIRED and REJECTED are terminal states.
 ```
 
-A recruiter can update an application only when the application belongs to a job owned by that recruiter.
+New applications start with `APPLIED` status. Recruiter status-update requests accept `SHORTLISTED`, `REJECTED`, or `HIRED`. Invalid transitions return HTTP `409 Conflict`.
 
-Status updates use a conditional database update:
+### Resume Uploads
 
-```text
-Read current application status
-  ↓
-Validate requested transition
-  ↓
-Update only when:
-applicationId matches
-AND
-current database status still matches the previously read status
-  ↓
-1 row updated
-→ success
+- Candidates can request temporary pre-signed S3 upload URLs
+- PDF files are uploaded directly from the client to a private S3 bucket
+- Upload URLs expire after 5 minutes
+- Resume objects use server-generated S3 keys
+- Resume metadata is stored in PostgreSQL and linked to applications
+- Resume metadata validation includes PDF content type and a maximum declared file size of 5 MB
+- S3 upload permissions are restricted to the required resume prefix
 
-0 rows updated
-→ application state changed concurrently
-→ HTTP 409 Conflict
-```
+### Email Notifications
 
-This prevents a stale concurrent request from silently overwriting a newer application status.
+- Amazon SES sends application confirmation and status-update emails
+- API controllers enqueue email jobs using BullMQ and Redis
+- A separate worker processes email jobs asynchronously
+- Jobs use up to 3 processing attempts with exponential backoff
+- Jobs can remain queued while the worker is temporarily offline
+- Email processing does not roll back an already-successful application or status update
 
-### Async Email Queue Flow
+### Caching
 
-Application and status-update emails are produced by the API and processed by a separate worker:
+- Redis cache-aside caching for the default active job listing
+- TTL-based cache expiration
+- Cache invalidation after job creation, update, or close
+- Consistent API response format for cache hits and misses
 
-```text
-API / Producer
-  ↓
-Business database operation succeeds
-  ↓
-emailQueue.add("send-email", ...)
-  ↓
-BullMQ stores the job in Redis
-  ↓
-API returns success without waiting for SES
+### Error Handling and API Documentation
 
-Worker process
-  ↓
-Reads waiting job from the "email" queue
-  ↓
-Calls sendEmail(to, subject, body)
-  ↓
-Amazon SES sends the email
-  ↓
-Job completes
-```
-
-The email queue uses these default job options:
-
-```text
-attempts: 3
-backoff: exponential
-initial backoff delay: 2000 ms
-removeOnComplete: true
-```
-
-A retry reprocesses the same BullMQ job, so the job ID remains the same across attempts. A new `emailQueue.add(...)` call creates a new job ID.
-
-If the worker is offline when a job is added:
-
-```text
-API enqueues job
-  ↓
-Job remains waiting in Redis
-  ↓
-Worker starts later
-  ↓
-Worker immediately processes the waiting job
-```
-
-This decouples the HTTP request from the email-processing process.
-
-Redis is used for two different responsibilities in the project:
-
-```text
-Redis
-├── Cache-aside storage for active job listings
-└── BullMQ job storage and coordination
-```
-
-Retries improve reliability, but background work can execute more than once in some failure scenarios. Side effects such as email sending should therefore be designed with duplicate execution in mind where necessary.
+- Centralized Express error-handling middleware
+- Zod request validation
+- Standardized success and error responses
+- Appropriate HTTP responses for authentication, authorization, validation, and database errors
+- OpenAPI 3.0 documentation with interactive Swagger UI
+- JWT Bearer authorization support in Swagger UI
 
 ## API Endpoints
 
-Interactive OpenAPI documentation is available at `http://localhost:3000/api-docs` while the development server is running. Use **Authorize** in Swagger UI and enter a valid JWT access token to try protected endpoints. Swagger describes the API contract; Express middleware and Zod enforce authorization and validation.
+Interactive API documentation is available at:
+
+http://localhost:3000/api-docs
+
+Use the **Authorize** button in Swagger UI to provide a valid JWT access token when testing protected endpoints.
 
 ### Authentication
 
@@ -323,6 +122,14 @@ Interactive OpenAPI documentation is available at `http://localhost:3000/api-doc
 | PATCH  | `/jobs/:jobId`       | Recruiter / Owner | Update a job          |
 | PATCH  | `/jobs/:jobId/close` | Recruiter / Owner | Close a job           |
 
+`GET /jobs` supports pagination, filtering, and search using `page`, `limit`, `location`, `experience`, `skills`, `jobType`, and `search`.
+
+Example:
+
+```http
+GET /jobs?search=node&location=Pune&jobType=FULL_TIME&page=1&limit=10
+```
+
 ### Applications
 
 | Method | Endpoint                              | Access            | Description                    |
@@ -331,88 +138,19 @@ Interactive OpenAPI documentation is available at `http://localhost:3000/api-doc
 | POST   | `/applications/:applicationId/resume` | Candidate         | Store and link resume metadata |
 | PATCH  | `/applications/:applicationId/status` | Recruiter / Owner | Update application status      |
 
-Resume metadata request:
-
-```json
-{
-  "resumeKey": "resumes/6/<uuid>.pdf",
-  "fileName": "resume.pdf",
-  "contentType": "application/pdf",
-  "fileSize": 847213
-}
-```
-
-Application status update request:
-
-```json
-{
-  "status": "SHORTLISTED"
-}
-```
-
-Supported application statuses:
-
-```text
-APPLIED
-SHORTLISTED
-REJECTED
-HIRED
-```
-
-Not every status can transition directly to every other status. Invalid transitions return HTTP `409 Conflict`.
-
 ### Uploads
 
 | Method | Endpoint              | Access    | Description                                |
 | ------ | --------------------- | --------- | ------------------------------------------ |
 | POST   | `/uploads/resume-url` | Candidate | Generate a pre-signed S3 resume upload URL |
 
-Resume upload URL request:
-
-```json
-{
-  "fileName": "resume.pdf",
-  "contentType": "application/pdf"
-}
-```
-
-The returned `uploadUrl` is then used by the client to send a direct `PUT` request to S3 with:
-
-```http
-Content-Type: application/pdf
-```
-
-### Job Listing Query Parameters
-
-`GET /jobs` supports:
-
-- `page`
-- `limit`
-- `location`
-- `experience`
-- `skills`
-- `jobType`
-- `search`
-
-Filter and paginate jobs:
-
-```http
-GET /jobs?page=1&limit=10&location=Pune&skills=Node.js,AWS&jobType=FULL_TIME
-```
-
-Search jobs by title, company, or skills:
-
-```http
-GET /jobs?search=node
-```
-
-Search combined with filters:
-
-```http
-GET /jobs?search=node&location=Pune&jobType=FULL_TIME&page=1&limit=10
-```
+The client uses the returned `uploadUrl` to upload a PDF directly to S3 with a `PUT` request and the `Content-Type: application/pdf` header.
 
 ## Setup
+
+### Local Development
+
+Copy `.env.example` to `.env` and configure the required environment variables. Do not commit `.env`.
 
 Install dependencies:
 
@@ -432,11 +170,7 @@ Generate Prisma Client:
 npx prisma generate
 ```
 
-Configure the local Redis connection in `.env`:
-
-```env
-REDIS_URL=redis://localhost:6379
-```
+Configure the local PostgreSQL and Redis connections in `.env`.
 
 Start Redis with Docker for the first time:
 
@@ -444,25 +178,11 @@ Start Redis with Docker for the first time:
 docker run --name job-portal-redis -p 6379:6379 -d redis:7-alpine
 ```
 
-For later runs, if the Redis container already exists but is stopped:
+If the Redis container already exists but is stopped:
 
 ```bash
 docker start job-portal-redis
 ```
-
-The development IAM identity uses least-privilege permissions for:
-
-```text
-S3
-→ s3:PutObject
-→ restricted to the resume upload prefix
-
-SES
-→ ses:SendEmail
-→ sender restricted using ses:FromAddress
-```
-
-When Amazon SES is in sandbox mode, test recipients must also be verified SES identities.
 
 Start the development server:
 
@@ -470,11 +190,67 @@ Start the development server:
 npm run dev
 ```
 
-Run the BullMQ email worker in a separate terminal:
+Run the BullMQ email worker in a separate PowerShell terminal:
 
 ```powershell
 $env:AWS_PROFILE="job-portal-dev"
-npx tsx src/workers/email.worker.ts
+npm run worker
 ```
 
-The API and worker run as separate processes. The API produces jobs, while the worker consumes them and sends emails through Amazon SES.
+For local AWS functionality, configure the `job-portal-dev` AWS profile with the required S3 and SES permissions. When Amazon SES is in sandbox mode, test recipients must also be verified SES identities.
+
+### Docker Compose (Local Development)
+
+Docker Compose runs the API, PostgreSQL, Redis, Prisma migrations, and BullMQ email worker as separate services.
+
+**Prerequisites**
+
+- Install and start Docker Desktop.
+- Configure `.env` using `.env.example`. Keep actual credentials out of Git.
+- Set `DB_PASSWORD_URLENCODED` to the URL-encoded version of `DB_PASSWORD`.
+- For local AWS testing on Windows, configure the `job-portal-dev` AWS profile. The API and worker mount the host's `.aws` directory read-only. This setup is intended for trusted local development, not production.
+
+**Build and start all services**
+
+From the project root, run:
+
+```bash
+docker compose up -d --build
+```
+
+Check service status:
+
+```bash
+docker compose ps -a
+```
+
+Swagger UI: http://localhost:3000/api-docs
+
+**Common commands**
+
+```bash
+# Start existing services
+docker compose up -d
+
+# Rebuild after application code or dependency changes
+docker compose up -d --build
+
+# Follow API and worker logs
+docker compose logs -f --tail=20 api worker
+
+# Stop services
+docker compose stop
+
+# Inspect Docker PostgreSQL
+docker compose exec postgres psql -U postgres -d job_portal
+```
+
+**Data and networking**
+
+The API connects to PostgreSQL at `postgres:5432` and Redis at `redis:6379` using Compose service names.
+
+Docker PostgreSQL is separate from PostgreSQL installed directly on Windows. Its port is not published to Windows by default; database inspection is available through `docker compose exec`.
+
+PostgreSQL and Redis use named volumes to retain data across normal container restarts and recreation. **Do not run `docker compose down -v` unless you intend to delete the project's volume data.**
+
+The migration service applies existing Prisma migrations during startup. `Exited (0)` indicates successful completion.

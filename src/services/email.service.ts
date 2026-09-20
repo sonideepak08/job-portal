@@ -1,6 +1,6 @@
-import { envVariables } from "../config/env.ts";
 import { sesClient } from "../config/ses.ts";
 import { SendEmailCommand } from "@aws-sdk/client-sesv2";
+import { workerEnvVariables } from "../config/workerEnv.ts";
 
 export const sendEmail = async (
   to: string[],
@@ -8,7 +8,7 @@ export const sendEmail = async (
   body: string,
 ) => {
   const sendEmailCommand = new SendEmailCommand({
-    FromEmailAddress: envVariables.SES_FROM_EMAIL,
+    FromEmailAddress: workerEnvVariables.SES_FROM_EMAIL,
     Destination: {
       ToAddresses: to,
     },
