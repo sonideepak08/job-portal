@@ -254,3 +254,100 @@ Docker PostgreSQL is separate from PostgreSQL installed directly on Windows. Its
 PostgreSQL and Redis use named volumes to retain data across normal container restarts and recreation. **Do not run `docker compose down -v` unless you intend to delete the project's volume data.**
 
 The migration service applies existing Prisma migrations during startup. `Exited (0)` indicates successful completion.
+
+### AWS EC2 Deployment
+
+The Job Portal is deployed to an Amazon EC2 instance using Docker Compose.
+
+### EC2 Architecture
+
+The EC2 deployment uses:
+
+- Amazon Linux 2023
+- Docker Engine
+- Docker Compose
+- Git
+- PostgreSQL 17 container
+- Redis 7 container
+- API container
+- BullMQ worker container
+- Prisma migration container
+- IAM instance role for AWS access
+
+The EC2 instance uses an IAM role instead of local AWS access keys or the local `job-portal-dev` AWS profile.
+
+### EC2-Specific Compose Configuration
+
+Local development uses `compose.yaml`.
+
+EC2 deployment uses: `compose.ec2.yaml`:
+
+```bash
+docker compose -f compose.ec2.yaml up -d --build
+```
+
+The EC2 API is bound to the host loopback interface:
+
+ports:
+
+- "127.0.0.1:3000:3000"
+
+For development testing, an SSH tunnel can forward the EC2 loopback-bound API to the local machine:
+
+Example(.pem file is in Downloads):
+
+ssh -i "$env:USERPROFILE\Downloads\job-portal-ec2-key.pem" -L 4000:127.0.0.1:3000 ec2-user@<EC2_PUBLIC_DNS>
+
+The API can then be accessed from the local machine through:
+
+http://localhost:4000
+
+### Architecture
+
+                    ┌─────────────────────┐
+                    │      Client         │
+                    │ Postman / Browser   │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │   Express API       │
+                    │      :3000          │
+                    └─────┬──────┬────┬───┘
+                          │      │    │
+             ┌────────────┘      │    └──────────────┐
+             ▼                   ▼                   ▼
+      ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+      │ PostgreSQL  │     │    Redis    │     │     S3      │
+      │   Prisma    │     │   Cache     │     │   Resumes   │
+      └─────────────┘     └─────────────┘     └─────────────┘
+                               │
+                               ▼
+                         ┌─────────────┐
+                         │   BullMQ    │
+                         │    Queue    │
+                         └──────┬──────┘
+                                │
+                                ▼
+                         ┌─────────────┐
+                         │ Email Worker │
+                         │    + SES     │
+                         └─────────────┘
+
+And in AWS:
+
+                        AWS
+                         │
+                 ┌───────▼────────┐
+                 │      EC2       │
+                 │                │
+                 │ API container  │
+                 │ Worker         │
+                 │ PostgreSQL     │
+                 │ Redis          │
+                 └───────┬────────┘
+                         │
+                IAM Instance Role
+                    ┌────┴─────┐
+                    ▼          ▼
+                   S3         SES
