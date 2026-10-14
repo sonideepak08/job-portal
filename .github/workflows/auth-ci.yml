@@ -1,0 +1,40 @@
+name: Authentication API CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  auth-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: job_portal_test
+          POSTGRES_PASSWORD: local_test_password
+          POSTGRES_DB: job_portal_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U job_portal_test -d job_portal_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Generate client, migrate test database and run auth tests
+        run: npm test

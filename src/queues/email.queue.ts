@@ -8,8 +8,6 @@ export interface EmailJobData {
   body: string;
 }
 
-const redisUrl = new URL(envVariables.REDIS_URL);
-
 export const emailQueue = new Queue<EmailJobData>("email", {
   connection: bullQueueConnection,
   defaultJobOptions: {
