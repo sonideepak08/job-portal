@@ -1,0 +1,18 @@
+# Separate from your existing compose.yaml and EC2 deployment.
+services:
+  postgres-test:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: job_portal_test
+      POSTGRES_PASSWORD: local_test_password
+      POSTGRES_DB: job_portal_test
+    ports:
+      - "127.0.0.1:55432:5432"
+    # Disposable database; no production volume is mounted.
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U job_portal_test -d job_portal_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
